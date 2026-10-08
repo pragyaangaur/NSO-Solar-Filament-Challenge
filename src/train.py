@@ -78,3 +78,80 @@ def device():
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
+
+
+def autocast(dev):
+    """bfloat16 mixed precision on GPUs, plain float32 on the CPU."""
+    if dev.type == "cpu":
+        return torch.autocast("cpu", enabled=False)
+    return torch.autocast(dev.type, dtype=torch.bfloat16)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--fold", type=int, required=True)
+    ap.add_argument("--encoder", default="resnet34", help="any segmentation_models_pytorch encoder")
+    ap.add_argument("--epochs", type=int, default=30)
+    ap.add_argument("--steps", type=int, default=250, help="batches per epoch")
+    ap.add_argument("--bs", type=int, default=4)
+    ap.add_argument("--lr", type=float, default=3e-4)
+    ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--name", default="unet_baseline")
+    args = ap.parse_args()
+
+    torch.manual_seed(args.fold)
+    random.seed(args.fold)
+    meta = json.load(open(CACHE / "meta.json"))["train"]
+    train_obs = [o for o, m in meta.items() if m["fold"] != args.fold]
+    val_obs = [o for o, m in meta.items() if m["fold"] == args.fold]
+    print(f"fold {args.fold}: {len(train_obs)} train and {len(val_obs)} validation observations", flush=True)
+    out = OUT / args.name / f"fold{args.fold}"
+    out.mkdir(parents=True, exist_ok=True)
+    json.dump({"encoder": args.encoder}, open(OUT / args.name / "model.json", "w"))
+
+    dev = device()
+    model = build_model(args.encoder).to(dev)
+    opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    total = args.epochs * args.steps
+    # Linear warm-up for 300 steps, then cosine decay to zero.
+    sched = torch.optim.lr_scheduler.LambdaLR(
+        opt, lambda s: min(1.0, (s + 1) / 300) * 0.5 * (1 + math.cos(math.pi * min(s, total) / total)))
+
+    tl = DataLoader(CropDataset(train_obs, meta, total * args.bs), batch_size=args.bs,
+                    num_workers=args.workers, persistent_workers=args.workers > 0)
+    vl = DataLoader(CropDataset(val_obs, meta, 128, augment=False, seed=12345), batch_size=args.bs)
+
+    log = open(out / "log.txt", "a")
+    step, run, t0 = 0, 0.0, time.time()
+    model.train()
+    for x, t in tl:
+        x, t = x.to(dev), t.to(dev)
+        with autocast(dev):
+            logits = model(x)
+        loss = loss_fn(logits.float(), t)
+        opt.zero_grad(set_to_none=True)
+        loss.backward()
+        opt.step()
+        sched.step()
+        run += loss.item()
+        step += 1
+        if step % args.steps == 0:
+            model.eval()
+            vloss = 0.0
+            with torch.no_grad():
+                for vx, vt in vl:
+                    with autocast(dev):
+                        vloss += loss_fn(model(vx.to(dev)).float(), vt.to(dev)).item()
+            model.train()
+            msg = (f"fold {args.fold} epoch {step // args.steps}/{args.epochs} train {run / args.steps:.4f} "
+                   f"val {vloss / len(vl):.4f} lr {sched.get_last_lr()[0]:.2e} {(time.time() - t0) / 60:.1f} min")
+            print(msg, flush=True)
+            log.write(msg + "\n")
+            log.flush()
+            run = 0.0
+            torch.save(model.state_dict(), out / "last.pt")
+    print(f"done, checkpoint in {out / 'last.pt'}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
