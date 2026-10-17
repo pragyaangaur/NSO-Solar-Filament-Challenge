@@ -23,4 +23,6 @@ The notebook has three switches. `RUN_TRAINING` trains the three U-Nets with fiv
 
 ## Where the weights come from
 
-The 15 U-Net checkpoints are outputs of private Kaggle kernels of the account `pragyaangaur`, listed in section 2 of the notebook. Add those kernels as inputs of a Kaggle notebook and the notebook finds the files by their paths. The ten quality-head files (`cnn_s<seed>_g<group>.pt`, about 43 MB each) were trained locally and must be shipped with the repository or as a Kaggle dataset, with `FIL_HEAD_DIR` pointing to them.
+All weights are public in the Kaggle dataset [pragyaangaur/filament-segmentation-2026-weights](https://www.kaggle.com/datasets/pragyaangaur/filament-segmentation-2026-weights). It holds the 15 U-Net checkpoints as `<model>_fold<k>.pt` (float16 EMA state dicts, about 64 MB each) and the 10 CNN quality heads as `cnn_s<seed>_g<group>.pt` (about 45 MB each). On Kaggle, add the dataset as an input of the notebook and it finds the files under `/kaggle/input`. On another machine, download the dataset into `weights/` next to the notebook or point `FIL_WEIGHTS_DIR` to it.
+
+To run the whole pipeline from the checkpoints on Kaggle, attach the competition data and the weights dataset, enable the internet, choose the 2xT4 accelerator and set `FIL_RUN_INFERENCE=1`.
