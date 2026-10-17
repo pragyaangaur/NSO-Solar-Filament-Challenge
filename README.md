@@ -12,7 +12,7 @@ Every filament must be predicted as a separate instance. Submissions are scored 
 
 ## Status
 
-The final pipeline is in [`final/`](final/README.md). Its notebook `final/pipeline.ipynb` runs everything from the raw competition data to `submission.csv`, and it reaches an out-of-fold PQ of 0.4571 with the organisers' scorer. The pipeline fuses three whole-disk ConvNeXt-Tiny U-Nets at the level of single filaments and keeps each filament only when a CNN quality head expects it to raise PQ. The rest of this repository is the first baseline, which is kept for comparison.
+The final pipeline is in [`final/`](final/README.md). Its notebook `final/pipeline.ipynb` runs everything from the raw competition data to `submission.csv`, and it reaches an out-of-fold PQ of 0.4571 with the organisers' scorer. The pipeline fuses three whole-disk ConvNeXt-Tiny U-Nets at the level of single filaments and keeps each filament only when a CNN quality head expects it to raise PQ. The technical report is [`report/report.pdf`](report/report.pdf), and all model weights are public in the Kaggle dataset [pragyaangaur/filament-segmentation-2026-weights](https://www.kaggle.com/datasets/pragyaangaur/filament-segmentation-2026-weights). The rest of this repository is the first baseline, which is kept for comparison.
 
 ## Repository layout
 
